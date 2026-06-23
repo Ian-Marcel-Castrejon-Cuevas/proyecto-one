@@ -1,0 +1,28 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  min-height: 100vh;
+}
+
+.app.carven2-mode {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+}
+
+.app.proyectone-mode {
+  background: linear-gradient(145deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
