@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 function Leyendas() {
   const [file, setFile] = useState(null);
@@ -7,39 +8,49 @@ function Leyendas() {
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [bancoSeleccionado, setBancoSeleccionado] = useState("");
+
+  // Selectores principales
+  const [carteraSeleccionada, setCarteraSeleccionada] = useState("");
   const [tipoSeleccionado, setTipoSeleccionado] = useState("");
-  const [downloadInfo, setDownloadInfo] = useState(null);
-  const [currentDownloading, setCurrentDownloading] = useState(null);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(() => {
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, "0");
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const year = String(today.getFullYear()).slice(2);
+    return `${day}${month}${year}`;
+  });
+
+  // Selector específico para GMF
+  const [tipoGMF, setTipoGMF] = useState("HER");
+
+  // Columnas del archivo - Ahora son "Columnas a texto"
+  const [columnasDisponibles, setColumnasDisponibles] = useState([]);
+  const [columnasTexto, setColumnasTexto] = useState([]);
+
+  // Estado para el procesamiento
+  const [archivosGenerados, setArchivosGenerados] = useState([]);
+  const [mostrarDescargas, setMostrarDescargas] = useState(false);
+
   const fileInputRef = useRef(null);
 
-  const API_URL = "http://192.168.28.35:3002";
-
-  const extractFilesFromZip = async (zipFile) => {
-    const JSZip = (await import("jszip")).default;
-    const zip = new JSZip();
-
+  // Procesar el archivo para obtener las columnas
+  const procesarArchivoParaColumnas = async (selectedFile) => {
     try {
-      const contents = await zip.loadAsync(zipFile);
-      const excelFiles = [];
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(hoja);
 
-      for (const [filename, fileData] of Object.entries(contents.files)) {
-        if (
-          !fileData.dir &&
-          (filename.endsWith(".xlsx") || filename.endsWith(".xls"))
-        ) {
-          const blob = await fileData.async("blob");
-          const extractedFile = new File([blob], filename.split("/").pop(), {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          });
-          excelFiles.push(extractedFile);
-        }
+      if (json.length > 0) {
+        const columnas = Object.keys(json[0]);
+        setColumnasDisponibles(columnas);
+        setColumnasTexto([]); // Por defecto ninguna seleccionada
+        return true;
       }
-
-      return excelFiles;
+      return false;
     } catch (error) {
-      console.error("Error leyendo ZIP:", error);
-      return [];
+      console.error("Error al leer el archivo:", error);
+      return false;
     }
   };
 
@@ -47,80 +58,122 @@ function Leyendas() {
     const name = selectedFile.name;
     const extension = name.split(".").pop()?.toLowerCase();
 
-    if (extension === "zip") {
-      setProgress("Extrayendo archivos del ZIP...");
-      try {
-        const excelFiles = await extractFilesFromZip(selectedFile);
-
-        if (excelFiles.length === 0) {
-          alert(
-            "No se encontraron archivos Excel (.xlsx o .xls) dentro del ZIP",
-          );
-          setFile(null);
-          setFileName("");
-          setProgress("");
-          return;
-        }
-
-        if (excelFiles.length > 1) {
-          alert(
-            `Se encontraron ${excelFiles.length} archivos Excel. Se procesará el primero: ${excelFiles[0].name}`,
-          );
-        }
-
-        const firstExcel = excelFiles[0];
-        setFile(firstExcel);
-        setFileName(`${firstExcel.name} (extraído de ${name})`);
-        setError("");
-        setProgress(`Archivo extraído: ${firstExcel.name}`);
-      } catch (err) {
-        alert("Error al leer el archivo ZIP");
-        setFile(null);
-        setFileName("");
-        setProgress("");
-      }
-      return;
-    }
-
     if (extension === "xlsx" || extension === "xls") {
       setFile(selectedFile);
       setFileName(name);
       setError("");
       setProgress("");
+      setMostrarDescargas(false);
+      setArchivosGenerados([]);
+
+      // Cargar columnas
+      const success = await procesarArchivoParaColumnas(selectedFile);
+      if (!success) {
+        setError("No se pudieron leer las columnas del archivo");
+      }
     } else {
-      alert(
-        "Formato no soportado. Arrastra un archivo Excel (.xlsx o .xls) o un ZIP que contenga Excel",
-      );
+      alert("Formato no soportado. Solo archivos Excel (.xlsx o .xls)");
       setFile(null);
       setFileName("");
     }
   };
 
-  const downloadFile = async (url, filename) => {
-    try {
-      const response = await fetch(`${API_URL}${url}`);
-      if (!response.ok) {
-        throw new Error(`Error descargando ${filename}`);
-      }
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-      return true;
-    } catch (error) {
-      console.error(`Error descargando ${filename}:`, error);
-      return false;
+  // Función para cancelar todo
+  const cancelarTodo = () => {
+    setFile(null);
+    setFileName("");
+    setColumnasDisponibles([]);
+    setColumnasTexto([]);
+    setArchivosGenerados([]);
+    setMostrarDescargas(false);
+    setProgress("");
+    setError("");
+    setCarteraSeleccionada("");
+    setTipoSeleccionado("");
+    setTipoGMF("HER");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
+  // Función para generar el nombre del archivo
+  const generarNombreArchivo = (index, total) => {
+    let prefijo = tipoSeleccionado === "LEYENDAS" ? "LEY" : "GEST";
+    let cartera = "";
+    let extra = "";
+
+    switch (carteraSeleccionada) {
+      case "SCOTIABANK":
+        cartera = "SCOT";
+        break;
+      case "BBVA":
+        cartera = "BBVA";
+        break;
+      case "ATT":
+        cartera = "ATT";
+        break;
+      case "GMF":
+        cartera = "GMF";
+        extra = `_${tipoGMF}`;
+        break;
+      case "TOYOTA":
+        cartera = "TYT";
+        break;
+      default:
+        cartera = carteraSeleccionada;
+    }
+
+    const numeroArchivo = total > 1 ? `_${index + 1}` : "";
+    return `${prefijo}_${cartera}${extra}_${fechaSeleccionada}${numeroArchivo}.xlsx`;
+  };
+
+  // Función para crear una hoja con formato de texto en columnas específicas
+  const crearHojaConFormatoTexto = (datos, columnasTexto) => {
+    // Crear la hoja con los datos
+    const ws = XLSX.utils.json_to_sheet(datos);
+
+    // Si hay columnas que deben ser texto, aplicar formato
+    if (columnasTexto.length > 0 && datos.length > 0) {
+      // Obtener las referencias de las celdas
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+
+      // Encontrar los índices de las columnas
+      const encabezados = Object.keys(datos[0]);
+      const indicesColumnasTexto = [];
+
+      columnasTexto.forEach((col) => {
+        const idx = encabezados.indexOf(col);
+        if (idx !== -1) {
+          indicesColumnasTexto.push(idx);
+        }
+      });
+
+      // Aplicar formato de texto a las celdas de las columnas seleccionadas
+      if (indicesColumnasTexto.length > 0) {
+        for (let r = range.s.r; r <= range.e.r; r++) {
+          for (let c = 0; c < indicesColumnasTexto.length; c++) {
+            const colIdx = indicesColumnasTexto[c];
+            const cellRef = XLSX.utils.encode_cell({ r: r, c: colIdx });
+
+            if (ws[cellRef]) {
+              if (ws[cellRef].v !== undefined && ws[cellRef].v !== null) {
+                ws[cellRef].v = String(ws[cellRef].v);
+              }
+              ws[cellRef].t = "s";
+              ws[cellRef].z = "@";
+            }
+          }
+        }
+      }
+    }
+
+    return ws;
+  };
+
   const handleSubmit = async () => {
-    if (!bancoSeleccionado) {
-      alert("Por favor, selecciona una empresa/cartera");
+    // Validaciones
+    if (!carteraSeleccionada) {
+      alert("Por favor, selecciona una cartera");
       return;
     }
 
@@ -129,123 +182,171 @@ function Leyendas() {
       return;
     }
 
+    if (
+      !fechaSeleccionada ||
+      fechaSeleccionada.length !== 6 ||
+      !/^\d{6}$/.test(fechaSeleccionada)
+    ) {
+      alert(
+        "Por favor, ingresa una fecha válida en formato DDMMYY (ejemplo: 070726)",
+      );
+      return;
+    }
+
     if (!file) {
       alert("Selecciona un archivo Excel");
       return;
     }
 
-    setLoading(true);
-    setProgress("Subiendo archivo...");
-    setError("");
-    setDownloadInfo(null);
+    if (columnasTexto.length === 0) {
+      alert("Selecciona al menos una columna a texto");
+      return;
+    }
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("banco", bancoSeleccionado);
-    formData.append("tipo", tipoSeleccionado);
+    setLoading(true);
+    setProgress("Procesando archivo...");
+    setError("");
+    setArchivosGenerados([]);
+    setMostrarDescargas(false);
 
     try {
-      const response = await fetch(`${API_URL}/leyendas/procesar`, {
-        method: "POST",
-        body: formData,
+      // Leer el archivo Excel
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+
+      // Convertir a JSON con formato de texto para columnas seleccionadas
+      const jsonData = XLSX.utils.sheet_to_json(hoja, {
+        defval: "",
+        raw: true,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Error al procesar");
+      if (jsonData.length === 0) {
+        throw new Error("El archivo está vacío");
       }
 
-      const contentType = response.headers.get("content-type");
+      // Procesar los datos: convertir a string SOLO las columnas seleccionadas
+      const datosProcesados = jsonData.map((fila) => {
+        const nuevaFila = {};
+        for (const columna of Object.keys(fila)) {
+          let valor = fila[columna];
 
-      if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-
-        if (data.multipleFiles) {
-          setDownloadInfo(data);
-          setProgress(
-            `Se generaron ${data.totalArchivos} archivos. Iniciando descarga...`,
-          );
-
-          let successCount = 0;
-          for (let i = 0; i < data.files.length; i++) {
-            const file = data.files[i];
-            setCurrentDownloading({
-              current: i + 1,
-              total: data.files.length,
-              name: file.name,
-            });
-            setProgress(
-              `Descargando archivo ${i + 1} de ${data.files.length}: ${file.name}`,
-            );
-
-            const success = await downloadFile(file.downloadUrl, file.name);
-            if (success) {
-              successCount++;
+          if (columnasTexto.includes(columna)) {
+            if (valor !== undefined && valor !== null) {
+              if (typeof valor === "number") {
+                valor = valor.toString();
+              } else if (typeof valor === "string") {
+                valor = valor;
+              } else {
+                valor = String(valor);
+              }
+            } else {
+              valor = "";
             }
-
-            await new Promise((resolve) => setTimeout(resolve, 500));
           }
 
-          setCurrentDownloading(null);
-          setProgress(
-            `¡Completado! Se descargaron ${successCount} de ${data.files.length} archivos.`,
-          );
-
-          setTimeout(() => {
-            if (progress.includes("Completado")) {
-              setProgress("");
-              setDownloadInfo(null);
-            }
-          }, 5000);
+          nuevaFila[columna] = valor;
         }
-      } else {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
+        return nuevaFila;
+      });
 
-        const fecha = new Date();
-        const dia = fecha.getDate().toString().padStart(2, "0");
-        const mes = (fecha.getMonth() + 1).toString().padStart(2, "0");
-        const anio = fecha.getFullYear().toString().slice(-2);
-        const fechaStr = `${dia}${mes}${anio}`;
+      // Dividir en grupos de 64999 registros
+      const MAX_REGISTROS = 64999;
+      const totalRegistros = datosProcesados.length;
+      const totalArchivos = Math.ceil(totalRegistros / MAX_REGISTROS);
 
-        let nombreBanco = "";
-        if (bancoSeleccionado === "SCOTIABANK") nombreBanco = "SCOT";
-        else if (bancoSeleccionado === "BBVA") nombreBanco = "BBVA";
-        else if (bancoSeleccionado === "ATT") nombreBanco = "ATT";
-        else if (bancoSeleccionado === "GMF") nombreBanco = "GMF";
-        else if (bancoSeleccionado === "TOYOTA") nombreBanco = "TOYOTA";
-        else nombreBanco = bancoSeleccionado;
+      setProgress(
+        `Dividiendo ${totalRegistros} registros en ${totalArchivos} archivos...`,
+      );
 
-        let prefijo = tipoSeleccionado === "LEYENDAS" ? "LEY_" : "GES_";
-        a.download = `${prefijo}${nombreBanco}_${fechaStr}.xls`;
+      const archivosGeneradosTemp = [];
 
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+      for (let i = 0; i < totalArchivos; i++) {
+        const inicio = i * MAX_REGISTROS;
+        const fin = Math.min(inicio + MAX_REGISTROS, totalRegistros);
+        const chunk = datosProcesados.slice(inicio, fin);
 
-        setProgress(`¡Completado! Archivo descargado.`);
+        const nuevoWorkbook = XLSX.utils.book_new();
+        const nuevaHoja = crearHojaConFormatoTexto(chunk, columnasTexto);
+        XLSX.utils.book_append_sheet(nuevoWorkbook, nuevaHoja, "Hoja1");
 
-        setTimeout(() => {
-          if (progress.includes("Completado")) {
-            setProgress("");
-          }
-        }, 5000);
+        const wbout = XLSX.write(nuevoWorkbook, {
+          bookType: "xlsx",
+          type: "array",
+          bookSST: false,
+          cellStyles: true,
+        });
+
+        const blob = new Blob([wbout], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const url = URL.createObjectURL(blob);
+        const nombreArchivo = generarNombreArchivo(i, totalArchivos);
+
+        archivosGeneradosTemp.push({
+          nombre: nombreArchivo,
+          url: url,
+          registros: chunk.length,
+          index: i + 1,
+        });
+
+        setProgress(`Generando archivo ${i + 1} de ${totalArchivos}...`);
       }
+
+      setArchivosGenerados(archivosGeneradosTemp);
+      setMostrarDescargas(true);
+      setProgress(`¡Completado! Se generaron ${totalArchivos} archivos.`);
+
+      setTimeout(() => {
+        setProgress("");
+      }, 5000);
 
       setFile(null);
       setFileName("");
+      setColumnasDisponibles([]);
+      setColumnasTexto([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Error al procesar el archivo");
       setProgress("");
-      setDownloadInfo(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const descargarArchivo = (archivo) => {
+    const link = document.createElement("a");
+    link.href = archivo.url;
+    link.download = archivo.nombre;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const descargarTodos = () => {
+    archivosGenerados.forEach((archivo, index) => {
+      setTimeout(() => {
+        descargarArchivo(archivo);
+      }, index * 300);
+    });
+  };
+
+  const toggleColumnaTexto = (columna) => {
+    if (columnasTexto.includes(columna)) {
+      setColumnasTexto(columnasTexto.filter((c) => c !== columna));
+    } else {
+      setColumnasTexto([...columnasTexto, columna]);
+    }
+  };
+
+  const toggleTodasColumnasTexto = () => {
+    if (columnasTexto.length === columnasDisponibles.length) {
+      setColumnasTexto([]);
+    } else {
+      setColumnasTexto([...columnasDisponibles]);
     }
   };
 
@@ -284,6 +385,18 @@ function Leyendas() {
     }
   };
 
+  // Verificar si el botón Procesar debe estar habilitado
+  const isProcesarDisabled = () => {
+    return (
+      loading ||
+      !file ||
+      !carteraSeleccionada ||
+      !tipoSeleccionado ||
+      !fechaSeleccionada ||
+      columnasTexto.length === 0
+    );
+  };
+
   return (
     <div
       style={{
@@ -298,7 +411,7 @@ function Leyendas() {
     >
       <div
         style={{
-          maxWidth: "550px",
+          maxWidth: "650px",
           width: "100%",
           background: "rgba(255, 255, 255, 0.98)",
           borderRadius: "32px",
@@ -310,7 +423,7 @@ function Leyendas() {
         <h1
           style={{
             color: "#1e3c72",
-            marginBottom: "10px",
+            marginBottom: "5px",
             fontSize: "28px",
             fontWeight: "bold",
           }}
@@ -318,11 +431,11 @@ function Leyendas() {
           Procesador de Archivos
         </h1>
         <p style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}>
-          Divide en partes de 64,999 registros | Formato Excel 97-2003
+          Divide en partes de 64,999 registros | Formato Excel
         </p>
 
-        {/* Selector de Empresa/Cartera */}
-        <div style={{ marginBottom: "15px", textAlign: "left" }}>
+        {/* Selector de Cartera */}
+        <div style={{ marginBottom: "12px", textAlign: "left" }}>
           <label
             style={{
               fontSize: "13px",
@@ -332,14 +445,14 @@ function Leyendas() {
               marginBottom: "5px",
             }}
           >
-            Elige la cartera: <span style={{ color: "red" }}>*</span>
+            Cartera: <span style={{ color: "red" }}>*</span>
           </label>
           <select
-            value={bancoSeleccionado}
-            onChange={(e) => setBancoSeleccionado(e.target.value)}
+            value={carteraSeleccionada}
+            onChange={(e) => setCarteraSeleccionada(e.target.value)}
             style={{
               width: "100%",
-              padding: "12px",
+              padding: "10px 12px",
               borderRadius: "10px",
               border: "1px solid #ddd",
               fontSize: "14px",
@@ -357,7 +470,7 @@ function Leyendas() {
         </div>
 
         {/* Selector de Tipo de Archivo */}
-        <div style={{ marginBottom: "20px", textAlign: "left" }}>
+        <div style={{ marginBottom: "12px", textAlign: "left" }}>
           <label
             style={{
               fontSize: "13px",
@@ -367,14 +480,14 @@ function Leyendas() {
               marginBottom: "5px",
             }}
           >
-            📋 Tipo de archivo: <span style={{ color: "red" }}>*</span>
+            Tipo de archivo: <span style={{ color: "red" }}>*</span>
           </label>
           <select
             value={tipoSeleccionado}
             onChange={(e) => setTipoSeleccionado(e.target.value)}
             style={{
               width: "100%",
-              padding: "12px",
+              padding: "10px 12px",
               borderRadius: "10px",
               border: "1px solid #ddd",
               fontSize: "14px",
@@ -388,6 +501,158 @@ function Leyendas() {
           </select>
         </div>
 
+        {/* Selector de Fecha */}
+        <div style={{ marginBottom: "12px", textAlign: "left" }}>
+          <label
+            style={{
+              fontSize: "13px",
+              fontWeight: "bold",
+              color: "#333",
+              display: "block",
+              marginBottom: "5px",
+            }}
+          >
+            Fecha (DDMMYY): <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            type="text"
+            maxLength="6"
+            value={fechaSeleccionada}
+            onChange={(e) =>
+              setFechaSeleccionada(e.target.value.replace(/\D/g, ""))
+            }
+            placeholder="Ej: 070726"
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: "10px",
+              border: "1px solid #ddd",
+              fontSize: "14px",
+              backgroundColor: "#fff",
+              fontFamily: "monospace",
+            }}
+          />
+        </div>
+
+        {/* Selector específico para GMF */}
+        {carteraSeleccionada === "GMF" && (
+          <div style={{ marginBottom: "12px", textAlign: "left" }}>
+            <label
+              style={{
+                fontSize: "13px",
+                fontWeight: "bold",
+                color: "#333",
+                display: "block",
+                marginBottom: "5px",
+              }}
+            >
+              Tipo GMF: <span style={{ color: "red" }}>*</span>
+            </label>
+            <select
+              value={tipoGMF}
+              onChange={(e) => setTipoGMF(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "10px",
+                border: "1px solid #ddd",
+                fontSize: "14px",
+                backgroundColor: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <option value="HER">HER</option>
+              <option value="VIS">VIS</option>
+              <option value="DEV">DEV</option>
+            </select>
+          </div>
+        )}
+
+        {/* Selector de Columnas a Texto */}
+        {columnasDisponibles.length > 0 && (
+          <div style={{ marginBottom: "15px", textAlign: "left" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "8px",
+              }}
+            >
+              <label
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  color: "#333",
+                }}
+              >
+                Columnas a texto: <span style={{ color: "red" }}>*</span>
+              </label>
+              <button
+                onClick={toggleTodasColumnasTexto}
+                style={{
+                  fontSize: "12px",
+                  padding: "4px 12px",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  background: "#f8f9fa",
+                  cursor: "pointer",
+                }}
+              >
+                {columnasTexto.length === columnasDisponibles.length
+                  ? "Deseleccionar todas"
+                  : "Seleccionar todas"}
+              </button>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                maxHeight: "120px",
+                overflowY: "auto",
+                padding: "10px",
+                background: "#f8f9fa",
+                borderRadius: "10px",
+                border: "1px solid #e9ecef",
+              }}
+            >
+              {columnasDisponibles.map((col) => (
+                <label
+                  key={col}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    padding: "4px 10px",
+                    background: columnasTexto.includes(col)
+                      ? "#e3f2fd"
+                      : "#fff",
+                    borderRadius: "6px",
+                    border: columnasTexto.includes(col)
+                      ? "1px solid #1976d2"
+                      : "1px solid #e9ecef",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={columnasTexto.includes(col)}
+                    onChange={() => toggleColumnaTexto(col)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span>{col}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize: "11px", color: "#999", marginTop: "4px" }}>
+              {columnasTexto.length} de {columnasDisponibles.length} columnas se
+              guardarán como texto
+            </div>
+          </div>
+        )}
+
         {/* Área de drop */}
         <div
           onClick={() => fileInputRef.current?.click()}
@@ -398,18 +663,17 @@ function Leyendas() {
           style={{
             background: isDragging ? "#fff3e0" : "#f8f9fa",
             borderRadius: "20px",
-            padding: "40px 30px",
+            padding: "35px 25px",
             border: isDragging ? "2px solid #ff6b35" : "2px dashed #dee2e6",
-            marginBottom: "20px",
+            marginBottom: "15px",
             transition: "all 0.3s ease",
             cursor: "pointer",
           }}
         >
           <input
             ref={fileInputRef}
-            id="fileInput"
             type="file"
-            accept=".xlsx,.xls,.zip"
+            accept=".xlsx,.xls"
             onChange={handleFileChange}
             style={{ display: "none" }}
           />
@@ -419,13 +683,13 @@ function Leyendas() {
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: "12px",
+              gap: "10px",
             }}
           >
             <div
               style={{
-                width: "70px",
-                height: "70px",
+                width: "60px",
+                height: "60px",
                 background: isDragging ? "#ff6b35" : "#e9ecef",
                 borderRadius: "50%",
                 display: "flex",
@@ -434,7 +698,7 @@ function Leyendas() {
                 transition: "all 0.3s ease",
               }}
             >
-              <span style={{ fontSize: "32px" }}>
+              <span style={{ fontSize: "28px" }}>
                 {isDragging ? "📂" : "📁"}
               </span>
             </div>
@@ -456,11 +720,23 @@ function Leyendas() {
                     fontWeight: "500",
                     fontSize: "14px",
                     display: "block",
-                    marginTop: "5px",
+                    marginTop: "3px",
                   }}
                 >
                   {fileName}
                 </span>
+                {columnasDisponibles.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#666",
+                      marginTop: "3px",
+                      display: "block",
+                    }}
+                  >
+                    {columnasDisponibles.length} columnas detectadas
+                  </span>
+                )}
               </div>
             ) : (
               <>
@@ -474,195 +750,182 @@ function Leyendas() {
                   Seleccionar o arrastrar archivo
                 </span>
                 <span style={{ fontSize: "12px", color: "#999" }}>
-                  .xlsx, .xls o .zip (con Excel dentro)
+                  .xlsx o .xls
                 </span>
               </>
-            )}
-
-            {isDragging && (
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#ff6b35",
-                  fontWeight: "500",
-                  marginTop: "5px",
-                }}
-              >
-                Suelta el archivo aquí
-              </span>
             )}
           </div>
         </div>
 
-        {/* Información de descarga múltiple */}
-        {downloadInfo && (
-          <div
+        {/* Botones de acción */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "0px" }}>
+          <button
+            onClick={handleSubmit}
+            disabled={isProcesarDisabled()}
             style={{
-              marginBottom: "15px",
-              padding: "12px",
-              background: "#e3f2fd",
-              borderRadius: "10px",
-              fontSize: "12px",
-              textAlign: "left",
-            }}
-          >
-            <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
-              Información del procesamiento:
-            </div>
-            <div>Total archivos: {downloadInfo.totalArchivos}</div>
-            <div>
-              Total registros: {downloadInfo.totalRegistros?.toLocaleString()}
-            </div>
-            {downloadInfo.files.map((file, idx) => (
-              <div
-                key={idx}
-                style={{ fontSize: "11px", marginTop: "4px", color: "#666" }}
-              >
-                • {file.name}: {file.registros?.toLocaleString()} registros
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Barra de progreso de descarga múltiple */}
-        {currentDownloading && (
-          <div
-            style={{
-              marginBottom: "15px",
-              padding: "10px",
-              background: "#fff3e0",
-              borderRadius: "8px",
-              fontSize: "12px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "5px",
-              }}
-            >
-              <span>Descargando...</span>
-              <span>
-                {currentDownloading.current} / {currentDownloading.total}
-              </span>
-            </div>
-            <div
-              style={{
-                width: "100%",
-                height: "6px",
-                background: "#e0e0e0",
-                borderRadius: "3px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${(currentDownloading.current / currentDownloading.total) * 100}%`,
-                  height: "100%",
-                  background: "#ff6b35",
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: "11px", marginTop: "5px", color: "#666" }}>
-              {currentDownloading.name}
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !file || !bancoSeleccionado || !tipoSeleccionado}
-          style={{
-            width: "100%",
-            padding: "16px",
-            background:
-              loading || !file || !bancoSeleccionado || !tipoSeleccionado
+              flex: 1,
+              padding: "14px",
+              background: isProcesarDisabled()
                 ? "#ccc"
                 : "linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)",
-            color: "white",
-            border: "none",
-            borderRadius: "14px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            cursor:
-              loading || !file || !bancoSeleccionado || !tipoSeleccionado
-                ? "not-allowed"
-                : "pointer",
-            transition: "all 0.3s ease",
-            boxShadow:
-              loading || !file || !bancoSeleccionado || !tipoSeleccionado
+              color: "white",
+              border: "none",
+              borderRadius: "12px",
+              fontSize: "15px",
+              fontWeight: "bold",
+              cursor: isProcesarDisabled() ? "not-allowed" : "pointer",
+              transition: "all 0.3s ease",
+              boxShadow: isProcesarDisabled()
                 ? "none"
                 : "0 5px 20px rgba(255, 107, 53, 0.4)",
-          }}
-        >
-          {loading ? (
-            <span
+            }}
+          >
+            {loading ? (
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "10px",
+                }}
+              >
+                <span
+                  className="spinner"
+                  style={{
+                    display: "inline-block",
+                    width: "18px",
+                    height: "18px",
+                    border: "2px solid white",
+                    borderTop: "2px solid transparent",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                ></span>
+                Procesando...
+              </span>
+            ) : (
+              "Procesar"
+            )}
+          </button>
+
+          <button
+            onClick={cancelarTodo}
+            style={{
+              padding: "14px 24px",
+              background: "#dc3545",
+              color: "white",
+              border: "none",
+              borderRadius: "12px",
+              fontSize: "15px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+            }}
+            onMouseEnter={(e) => (e.target.style.background = "#c82333")}
+            onMouseLeave={(e) => (e.target.style.background = "#dc3545")}
+          >
+            Cancelar
+          </button>
+        </div>
+
+        {/* Archivos generados - Botones de descarga */}
+        {mostrarDescargas && archivosGenerados.length > 0 && (
+          <div
+            style={{
+              marginTop: "15px",
+              padding: "15px",
+              background: "#e8f5e9",
+              borderRadius: "12px",
+              border: "1px solid #c8e6c9",
+            }}
+          >
+            <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "10px",
+                fontWeight: "bold",
+                marginBottom: "10px",
+                color: "#2e7d32",
               }}
             >
-              <span
-                className="spinner"
-                style={{
-                  display: "inline-block",
-                  width: "18px",
-                  height: "18px",
-                  border: "2px solid white",
-                  borderTop: "2px solid transparent",
-                  borderRadius: "50%",
-                  animation: "spin 0.8s linear infinite",
-                }}
-              ></span>
-              Procesando...
-            </span>
-          ) : (
-            "Procesar y Descargar"
-          )}
-        </button>
+              {archivosGenerados.length} archivo(s) generado(s):
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "center",
+              }}
+            >
+              {archivosGenerados.map((archivo, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => descargarArchivo(archivo)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "#4caf50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                    transition: "all 0.3s ease",
+                  }}
+                  onMouseEnter={(e) => (e.target.style.background = "#388e3c")}
+                  onMouseLeave={(e) => (e.target.style.background = "#4caf50")}
+                >
+                  📥 {archivo.nombre}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={descargarTodos}
+              style={{
+                marginTop: "10px",
+                padding: "8px 20px",
+                background: "#1976d2",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                transition: "all 0.3s ease",
+              }}
+              onMouseEnter={(e) => (e.target.style.background = "#1565c0")}
+              onMouseLeave={(e) => (e.target.style.background = "#1976d2")}
+            >
+              ⬇ Descargar todos
+            </button>
+          </div>
+        )}
 
         {progress && (
           <div
             style={{
-              marginTop: "20px",
-              padding: "12px",
-              background:
-                progress.includes("Completado") || progress.includes("")
-                  ? "#e8f5e9"
-                  : "#fff3e0",
+              marginTop: "15px",
+              padding: "10px 14px",
+              background: progress.includes("Completado")
+                ? "#e8f5e9"
+                : "#fff3e0",
               borderRadius: "10px",
               fontSize: "13px",
-              color:
-                progress.includes("Completado") || progress.includes("")
-                  ? "#2e7d32"
-                  : "#e65100",
-              borderLeft:
-                progress.includes("Completado") || progress.includes("")
-                  ? "3px solid #2e7d32"
-                  : "3px solid #ff6b35",
+              color: progress.includes("Completado") ? "#2e7d32" : "#e65100",
+              borderLeft: progress.includes("Completado")
+                ? "3px solid #2e7d32"
+                : "3px solid #ff6b35",
               textAlign: "left",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span>
-                {progress.includes("Completado") || progress.includes("")
-                  ? ""
-                  : ""}
-              </span>
-              <span>{progress}</span>
-            </div>
+            <span>{progress}</span>
           </div>
         )}
 
         {error && (
           <div
             style={{
-              marginTop: "20px",
-              padding: "12px",
+              marginTop: "15px",
+              padding: "10px 14px",
               background: "#ffebee",
               borderRadius: "10px",
               fontSize: "13px",
@@ -671,10 +934,7 @@ function Leyendas() {
               textAlign: "left",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span></span>
-              <span>{error}</span>
-            </div>
+            <span>{error}</span>
           </div>
         )}
       </div>
