@@ -129,10 +129,68 @@ body {
 }
 
 /* ============================================
+   PANEL DE SELECTORES
+   ============================================ */
+.selectors-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px;
+  padding: 20px 30px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.selector-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.selector-group select,
+.selector-group input {
+  padding: 8px 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  background: white;
+  font-family: inherit;
+}
+
+.selector-group select:focus,
+.selector-group input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.selector-group select:hover,
+.selector-group input:hover {
+  border-color: #ced4da;
+}
+
+.selector-group input {
+  width: 100%;
+}
+
+.selector-group input::placeholder {
+  color: #adb5bd;
+  font-size: 13px;
+}
+
+/* ============================================
    ACCIONES / BOTONES
    ============================================ */
 .actions {
-  padding: 30px;
+  padding: 20px 30px;
   display: flex;
   gap: 15px;
   justify-content: center;
@@ -662,6 +720,39 @@ body {
 }
 
 /* ============================================
+   MENSAJES DE VALIDACIÓN
+   ============================================ */
+.error-message {
+  color: #dc3545;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.error-list {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 10px;
+  padding: 15px 20px;
+  margin: 0 30px 20px 30px;
+  color: #856404;
+}
+
+.error-list h4 {
+  margin: 0 0 5px 0;
+  font-size: 14px;
+}
+
+.error-list ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.error-list li {
+  margin: 3px 0;
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 
@@ -719,8 +810,18 @@ body {
     font-size: 1.1rem;
   }
 
+  .selectors-panel {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 15px 20px;
+  }
+
+  .selector-group input {
+    max-width: 100%;
+  }
+
   .actions {
-    padding: 20px;
+    padding: 15px 20px;
     gap: 10px;
   }
 
@@ -757,6 +858,11 @@ body {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
+  }
+
+  .error-list {
+    margin: 0 20px 15px 20px;
+    padding: 12px 15px;
   }
 }
 
@@ -812,6 +918,35 @@ body {
   .btn-limpiar-busqueda {
     font-size: 15px;
     right: 8px;
+  }
+
+  .selectors-panel {
+    grid-template-columns: 1fr;
+    padding: 12px 15px;
+  }
+
+  .actions {
+    padding: 12px 15px;
+    gap: 8px;
+  }
+
+  .btn {
+    padding: 8px 16px;
+    font-size: 11px;
+  }
+
+  .results {
+    padding: 0 15px 15px 15px;
+  }
+
+  .error-list {
+    margin: 0 15px 10px 15px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .error-list ul {
+    font-size: 12px;
   }
 }
 
