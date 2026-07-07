@@ -433,7 +433,7 @@ function ProyectOne() {
       .filter((n) => n !== "");
 
     if (numbers.length === 0) {
-      alert("Por favor ingresa al menos un numero");
+      alert("Por favor ingresa al menos un carven");
       return;
     }
 
@@ -521,7 +521,7 @@ function ProyectOne() {
           </div>
           <h1>Verificacion de cuentas EDO MEX</h1>
           <p className="subtitle">
-            Carga archivos o ingresa numeros manualmente
+            Carga archivos o ingresa carven manualmente
           </p>
         </div>
 
@@ -668,7 +668,7 @@ function ProyectOne() {
                   marginBottom: "8px",
                 }}
               >
-                Ingresa los numeros (uno por linea):
+                Ingresa los carven (uno por linea):
               </label>
               <textarea
                 className="manual-textarea"
@@ -684,7 +684,7 @@ function ProyectOne() {
                 disabled={isLoading}
                 style={{ marginTop: "12px", width: "100%" }}
               >
-                {isLoading ? "Verificando..." : "Verificar numeros"}
+                {isLoading ? "Verificando..." : "Verificar carven"}
               </button>
               <button
                 className="btn btn-outline"
@@ -813,7 +813,7 @@ function ProyectOne() {
                       }}
                     >
                       {item.esManual
-                        ? "Los numeros ingresados no tienen resultados"
+                        ? "Los carven ingresados no tienen resultados"
                         : `La columna "${item.columnaUsada || "seleccionada"}" no contiene cuentas EDOMEX`}
                     </p>
                   </div>
