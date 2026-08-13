@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 function Leyendas() {
@@ -23,7 +23,7 @@ function Leyendas() {
   // Selector específico para GMF
   const [tipoGMF, setTipoGMF] = useState("HER");
 
-  // Columnas del archivo - Ahora son "Columnas a texto"
+  // Columnas del archivo - "Columnas a texto"
   const [columnasDisponibles, setColumnasDisponibles] = useState([]);
   const [columnasTexto, setColumnasTexto] = useState([]);
 
@@ -44,7 +44,8 @@ function Leyendas() {
       if (json.length > 0) {
         const columnas = Object.keys(json[0]);
         setColumnasDisponibles(columnas);
-        setColumnasTexto([]); // Por defecto ninguna seleccionada
+        // Seleccionar TODAS las columnas por defecto
+        setColumnasTexto(columnas);
         return true;
       }
       return false;
@@ -66,7 +67,6 @@ function Leyendas() {
       setMostrarDescargas(false);
       setArchivosGenerados([]);
 
-      // Cargar columnas
       const success = await procesarArchivoParaColumnas(selectedFile);
       if (!success) {
         setError("No se pudieron leer las columnas del archivo");
@@ -78,7 +78,6 @@ function Leyendas() {
     }
   };
 
-  // Función para cancelar todo
   const cancelarTodo = () => {
     setFile(null);
     setFileName("");
@@ -96,7 +95,6 @@ function Leyendas() {
     }
   };
 
-  // Función para generar el nombre del archivo
   const generarNombreArchivo = (index, total) => {
     let prefijo = tipoSeleccionado === "LEYENDAS" ? "LEY" : "GEST";
     let cartera = "";
@@ -124,20 +122,14 @@ function Leyendas() {
     }
 
     const numeroArchivo = total > 1 ? `_${index + 1}` : "";
-    return `${prefijo}_${cartera}${extra}_${fechaSeleccionada}${numeroArchivo}.xlsx`;
+    return `${prefijo}_${cartera}${extra}_${fechaSeleccionada}${numeroArchivo}.xls`;
   };
 
-  // Función para crear una hoja con formato de texto en columnas específicas
   const crearHojaConFormatoTexto = (datos, columnasTexto) => {
-    // Crear la hoja con los datos
     const ws = XLSX.utils.json_to_sheet(datos);
 
-    // Si hay columnas que deben ser texto, aplicar formato
     if (columnasTexto.length > 0 && datos.length > 0) {
-      // Obtener las referencias de las celdas
       const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-
-      // Encontrar los índices de las columnas
       const encabezados = Object.keys(datos[0]);
       const indicesColumnasTexto = [];
 
@@ -148,7 +140,6 @@ function Leyendas() {
         }
       });
 
-      // Aplicar formato de texto a las celdas de las columnas seleccionadas
       if (indicesColumnasTexto.length > 0) {
         for (let r = range.s.r; r <= range.e.r; r++) {
           for (let c = 0; c < indicesColumnasTexto.length; c++) {
@@ -171,7 +162,6 @@ function Leyendas() {
   };
 
   const handleSubmit = async () => {
-    // Validaciones
     if (!carteraSeleccionada) {
       alert("Por favor, selecciona una cartera");
       return;
@@ -188,7 +178,7 @@ function Leyendas() {
       !/^\d{6}$/.test(fechaSeleccionada)
     ) {
       alert(
-        "Por favor, ingresa una fecha válida en formato DDMMYY (ejemplo: 070726)",
+        "Por favor, ingresa una fecha valida en formato DDMMYY (ejemplo: 070726)",
       );
       return;
     }
@@ -210,22 +200,19 @@ function Leyendas() {
     setMostrarDescargas(false);
 
     try {
-      // Leer el archivo Excel
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: "array" });
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
 
-      // Convertir a JSON con formato de texto para columnas seleccionadas
       const jsonData = XLSX.utils.sheet_to_json(hoja, {
         defval: "",
         raw: true,
       });
 
       if (jsonData.length === 0) {
-        throw new Error("El archivo está vacío");
+        throw new Error("El archivo esta vacio");
       }
 
-      // Procesar los datos: convertir a string SOLO las columnas seleccionadas
       const datosProcesados = jsonData.map((fila) => {
         const nuevaFila = {};
         for (const columna of Object.keys(fila)) {
@@ -250,7 +237,6 @@ function Leyendas() {
         return nuevaFila;
       });
 
-      // Dividir en grupos de 64999 registros
       const MAX_REGISTROS = 64999;
       const totalRegistros = datosProcesados.length;
       const totalArchivos = Math.ceil(totalRegistros / MAX_REGISTROS);
@@ -271,14 +257,14 @@ function Leyendas() {
         XLSX.utils.book_append_sheet(nuevoWorkbook, nuevaHoja, "Hoja1");
 
         const wbout = XLSX.write(nuevoWorkbook, {
-          bookType: "xlsx",
+          bookType: "xls",
           type: "array",
           bookSST: false,
           cellStyles: true,
         });
 
         const blob = new Blob([wbout], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          type: "application/vnd.ms-excel",
         });
 
         const url = URL.createObjectURL(blob);
@@ -296,7 +282,7 @@ function Leyendas() {
 
       setArchivosGenerados(archivosGeneradosTemp);
       setMostrarDescargas(true);
-      setProgress(`¡Completado! Se generaron ${totalArchivos} archivos.`);
+      setProgress(`Completado! Se generaron ${totalArchivos} archivos.`);
 
       setTimeout(() => {
         setProgress("");
@@ -385,7 +371,6 @@ function Leyendas() {
     }
   };
 
-  // Verificar si el botón Procesar debe estar habilitado
   const isProcesarDisabled = () => {
     return (
       loading ||
@@ -431,7 +416,7 @@ function Leyendas() {
           Procesador de Archivos
         </h1>
         <p style={{ color: "#666", marginBottom: "20px", fontSize: "14px" }}>
-          Divide en partes de 64,999 registros | Formato Excel
+          Divide en partes de 64,999 registros | Formato Excel 97-2003
         </p>
 
         {/* Selector de Cartera */}
@@ -648,7 +633,7 @@ function Leyendas() {
             </div>
             <div style={{ fontSize: "11px", color: "#999", marginTop: "4px" }}>
               {columnasTexto.length} de {columnasDisponibles.length} columnas se
-              guardarán como texto
+              guardaran como texto
             </div>
           </div>
         )}
@@ -758,7 +743,7 @@ function Leyendas() {
         </div>
 
         {/* Botones de acción */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "0px" }}>
+        <div style={{ display: "flex", gap: "10px" }}>
           <button
             onClick={handleSubmit}
             disabled={isProcesarDisabled()}
@@ -828,7 +813,7 @@ function Leyendas() {
           </button>
         </div>
 
-        {/* Archivos generados - Botones de descarga */}
+        {/* Archivos generados */}
         {mostrarDescargas && archivosGenerados.length > 0 && (
           <div
             style={{
@@ -874,7 +859,7 @@ function Leyendas() {
                   onMouseEnter={(e) => (e.target.style.background = "#388e3c")}
                   onMouseLeave={(e) => (e.target.style.background = "#4caf50")}
                 >
-                  📥 {archivo.nombre}
+                  {archivo.nombre}
                 </button>
               ))}
             </div>
@@ -895,7 +880,7 @@ function Leyendas() {
               onMouseEnter={(e) => (e.target.style.background = "#1565c0")}
               onMouseLeave={(e) => (e.target.style.background = "#1976d2")}
             >
-              ⬇ Descargar todos
+              Descargar todos
             </button>
           </div>
         )}

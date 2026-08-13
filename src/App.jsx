@@ -35,6 +35,9 @@ function ProyectOne() {
   const [columnaSeleccionada, setColumnaSeleccionada] = useState("");
   const [columnasDisponibles, setColumnasDisponibles] = useState([]);
 
+  // Nuevo estado para el modo de procesamiento
+  const [modoProcesamiento, setModoProcesamiento] = useState("analizar"); // "analizar" o "solo-renombrar"
+
   // Estado para validación de selecciones
   const [erroresValidacion, setErroresValidacion] = useState([]);
 
@@ -197,9 +200,28 @@ function ProyectOne() {
     });
   };
 
-  // Función para procesar un archivo individual con la columna seleccionada
+  // Función para procesar un archivo individual con la columna seleccionada o sin analizar
   const procesarArchivoConColumna = async (file) => {
     try {
+      // Si el modo es "solo-renombrar", solo devolver el archivo original
+      if (modoProcesamiento === "solo-renombrar") {
+        // Leer el archivo original y convertirlo a blob
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+
+        return {
+          nombre: file.name,
+          resultado: [], // Sin resultados
+          url: url,
+          columnaUsada: "Ninguna (solo renombrado)",
+          esSoloRenombrar: true,
+        };
+      }
+
+      // Modo normal: analizar con columna
       const resultado = await procesarArchivoParaColumnas(file);
 
       // Extraer los valores de la columna seleccionada
@@ -261,6 +283,7 @@ function ProyectOne() {
         resultado: data,
         url: url,
         columnaUsada: columnaSeleccionada,
+        esSoloRenombrar: false,
       };
     } catch (error) {
       console.error("Error procesando archivo:", error);
@@ -279,32 +302,43 @@ function ProyectOne() {
     setColumnaSeleccionada("");
     setArchivosPendientes([]);
 
-    // Procesar el primer archivo para obtener las columnas
-    const primerArchivo = files[0];
-    try {
-      const resultado = await procesarArchivoParaColumnas(primerArchivo);
+    // Si el modo es "analizar", procesar el primer archivo para obtener columnas
+    if (modoProcesamiento === "analizar") {
+      const primerArchivo = files[0];
+      try {
+        const resultado = await procesarArchivoParaColumnas(primerArchivo);
 
-      // Guardar todas las columnas disponibles (las del primer archivo)
-      setColumnasDisponibles(resultado.columnas);
-      if (resultado.columnas.length > 0) {
-        setColumnaSeleccionada(resultado.columnas[0]);
+        // Guardar todas las columnas disponibles (las del primer archivo)
+        setColumnasDisponibles(resultado.columnas);
+        if (resultado.columnas.length > 0) {
+          setColumnaSeleccionada(resultado.columnas[0]);
+        }
+
+        // Guardar todos los archivos para procesar después
+        setArchivosPendientes(Array.from(files));
+
+        alert(
+          `Archivos cargados: ${files.length}\nColumna detectada: ${resultado.columnas[0] || "Ninguna"}\n\nSelecciona la columna que deseas analizar y presiona "Verificar archivos"`,
+        );
+      } catch (error) {
+        console.error("Error procesando archivo:", error);
+        alert(`Error al procesar el archivo: ${primerArchivo.name}`);
       }
-
-      // Guardar todos los archivos para procesar después
+    } else {
+      // Modo "solo-renombrar" - guardar archivos directamente sin analizar
       setArchivosPendientes(Array.from(files));
+      setColumnasDisponibles([]);
+      setColumnaSeleccionada("");
 
       alert(
-        `Archivos cargados: ${files.length}\nColumna detectada: ${resultado.columnas[0] || "Ninguna"}\n\nSelecciona la columna que deseas analizar y presiona "Verificar archivos"`,
+        `Archivos cargados: ${files.length}\nModo: Solo renombrar\n\nPresiona "Procesar archivos" para renombrar todos los archivos sin analizar.`,
       );
-    } catch (error) {
-      console.error("Error procesando archivo:", error);
-      alert(`Error al procesar el archivo: ${primerArchivo.name}`);
     }
   };
 
-  // Función para verificar TODOS los archivos con la columna seleccionada
+  // Función para verificar TODOS los archivos con la columna seleccionada o sin analizar
   const verificarArchivosConColumna = async () => {
-    if (!columnaSeleccionada) {
+    if (modoProcesamiento === "analizar" && !columnaSeleccionada) {
       alert("Por favor selecciona una columna para analizar");
       return;
     }
@@ -320,7 +354,7 @@ function ProyectOne() {
 
     const resultados = [];
 
-    // Procesar cada archivo con la MISMA columna seleccionada
+    // Procesar cada archivo
     for (let i = 0; i < archivosPendientes.length; i++) {
       const file = archivosPendientes[i];
       const resultado = await procesarArchivoConColumna(file);
@@ -350,7 +384,8 @@ function ProyectOne() {
           necesitaHora: !hora,
           nombreDescarga: nombreDescarga,
           esManual: false,
-          columnaUsada: columnaSeleccionada,
+          columnaUsada: resultado.columnaUsada,
+          esSoloRenombrar: resultado.esSoloRenombrar || false,
         });
       }
     }
@@ -588,26 +623,65 @@ function ProyectOne() {
             </>
           )}
 
-          {/* Selector de columna - GENERAL para todos los archivos */}
-          {columnasDisponibles.length > 0 && (
-            <div className="selector-group">
-              <label>Columna a analizar</label>
-              <select
-                value={columnaSeleccionada}
-                onChange={(e) => setColumnaSeleccionada(e.target.value)}
-              >
-                {columnasDisponibles.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-              {archivosPendientes.length > 1 && (
-                <span
-                  style={{ fontSize: "11px", color: "#666", marginTop: "2px" }}
-                ></span>
-              )}
-            </div>
+          {/* Selector de modo de procesamiento */}
+          <div
+            className="selector-group"
+            style={{ borderLeft: "2px solid #e9ecef", paddingLeft: "12px" }}
+          >
+            <label>Modo</label>
+            <select
+              value={modoProcesamiento}
+              onChange={(e) => {
+                setModoProcesamiento(e.target.value);
+                // Limpiar estados cuando cambia el modo
+                setArchivosPendientes([]);
+                setArchivosProcesados([]);
+                setTieneResultados(false);
+                setColumnasDisponibles([]);
+                setColumnaSeleccionada("");
+                if (inputRef.current) {
+                  inputRef.current.value = "";
+                }
+              }}
+            >
+              <option value="analizar">Analizar columna</option>
+              <option value="solo-renombrar">Solo renombrar</option>
+            </select>
+          </div>
+
+          {/* Selector de columna - solo visible en modo analizar */}
+          {modoProcesamiento === "analizar" &&
+            columnasDisponibles.length > 0 && (
+              <div className="selector-group">
+                <label>Columna a analizar</label>
+                <select
+                  value={columnaSeleccionada}
+                  onChange={(e) => setColumnaSeleccionada(e.target.value)}
+                >
+                  {columnasDisponibles.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+                {archivosPendientes.length > 1 && (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "#666",
+                      marginTop: "2px",
+                    }}
+                  ></span>
+                )}
+              </div>
+            )}
+
+          {/* Indicador del modo actual */}
+          {modoProcesamiento === "solo-renombrar" && (
+            <div
+              className="selector-group"
+              style={{ borderLeft: "2px solid #28a745", paddingLeft: "12px" }}
+            ></div>
           )}
         </div>
 
@@ -622,19 +696,22 @@ function ProyectOne() {
           />
 
           <button className="btn btn-primary" onClick={abrirSelectorArchivos}>
-            Anadir archivos
+            Añadir archivos
           </button>
 
-          {/* Botón para verificar TODOS los archivos con la columna seleccionada */}
-          {columnasDisponibles.length > 0 && archivosPendientes.length > 0 && (
+          {/* Botón para verificar TODOS los archivos con la columna seleccionada o sin analizar */}
+          {archivosPendientes.length > 0 && (
             <button
               className="btn btn-success"
               onClick={verificarArchivosConColumna}
-              disabled={isLoading}
+              disabled={
+                isLoading ||
+                (modoProcesamiento === "analizar" && !columnaSeleccionada)
+              }
             >
               {isLoading
-                ? "Verificando..."
-                : `Verificar ${archivosPendientes.length} archivo(s)`}
+                ? "Procesando..."
+                : `Procesar ${archivosPendientes.length} archivo(s)`}
             </button>
           )}
 
@@ -717,7 +794,9 @@ function ProyectOne() {
             {archivosProcesados.map((item, index) => (
               <div key={index} className="card">
                 <div className="card-header">
-                  <span className="card-icon">{item.esManual ? "⌨" : ""}</span>
+                  <span className="card-icon">
+                    {item.esManual ? "⌨" : item.esSoloRenombrar ? "📄" : "📊"}
+                  </span>
                   <span className="card-title">{item.nombre}</span>
                   <div
                     style={{
@@ -776,7 +855,24 @@ function ProyectOne() {
                   </div>
                 </div>
 
-                {item.resultado.length > 0 ? (
+                {/* Mostrar información del modo */}
+                {item.esSoloRenombrar && (
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#f0f9ff",
+                      borderBottom: "1px solid #e2e8f0",
+                      fontSize: "14px",
+                      color: "#0c5460",
+                    }}
+                  >
+                    <span>
+                      ✅ Archivo procesado sin análisis (solo renombrado)
+                    </span>
+                  </div>
+                )}
+
+                {item.resultado && item.resultado.length > 0 ? (
                   <div className="table-responsive">
                     <table className="table">
                       <thead>
@@ -803,19 +899,38 @@ function ProyectOne() {
                   </div>
                 ) : (
                   <div className="empty-state">
-                    <span className="empty-icon"></span>
-                    <p>No se encuentran cuentas EDOMEX</p>
-                    <p
-                      style={{
-                        fontSize: "13px",
-                        color: "#999",
-                        marginTop: "8px",
-                      }}
-                    >
-                      {item.esManual
-                        ? "Los carven ingresados no tienen resultados"
-                        : `La columna "${item.columnaUsada || "seleccionada"}" no contiene cuentas EDOMEX`}
-                    </p>
+                    {item.esSoloRenombrar ? (
+                      <>
+                        <span className="empty-icon">📄</span>
+                        <p>Archivo renombrado sin análisis</p>
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#999",
+                            marginTop: "8px",
+                          }}
+                        >
+                          El archivo se ha renombrado según los parámetros
+                          seleccionados
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="empty-icon">🔍</span>
+                        <p>No se encuentran cuentas EDOMEX</p>
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#999",
+                            marginTop: "8px",
+                          }}
+                        >
+                          {item.esManual
+                            ? "Los carven ingresados no tienen resultados"
+                            : `La columna "${item.columnaUsada || "seleccionada"}" no contiene cuentas EDOMEX`}
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
