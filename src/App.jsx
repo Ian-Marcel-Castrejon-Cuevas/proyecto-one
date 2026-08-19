@@ -6,6 +6,7 @@ import Carven2 from "./components/Carven2";
 import AdminPanel from "./components/AdminPanel";
 import Leyendas from "./components/Leyendas";
 import Status from "./components/Status";
+import Devoluciones from "./components/Devoluciones";
 import PlantillasWhatsApp from "./components/PlantillasWhatsApp";
 
 // Componente principal de verificación de cuentas EDOMEX
@@ -79,9 +80,12 @@ function ProyectOne() {
     navigate("/leyendas");
   };
 
-  // Nueva función para ir a la página de Status
   const irAStatus = () => {
     navigate("/status");
+  };
+
+  const irADevoluciones = () => {
+    navigate("/devoluciones");
   };
 
   // Función para validar las selecciones (se llama al descargar)
@@ -562,6 +566,9 @@ function ProyectOne() {
             <button className="btn-borrar-header" onClick={irAStatus}>
               Status
             </button>
+            <button className="btn-borrar-header" onClick={irADevoluciones}>
+              Devoluciones
+            </button>
           </div>
           <h1>Verificacion de cuentas EDO MEX</h1>
           <p className="subtitle">
@@ -959,8 +966,8 @@ function App() {
       <Route path="/carven2/admin" element={<AdminPanel />} />
       <Route path="/leyendas" element={<Leyendas />} />
       <Route path="/status" element={<Status />} />
+      <Route path="/devoluciones" element={<Devoluciones />} />
       <Route path="/plantillas-whatsapp" element={<PlantillasWhatsApp />} />
-      <Route path="/status" element={<div>Página de Status</div>} />
       <Route path="/" element={<ProyectOne />} />
     </Routes>
   );

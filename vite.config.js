@@ -9,9 +9,9 @@ function redirectRootPlugin() {
         console.log(`Petición recibida: ${req.url}`);
 
         if (req.url === "/") {
-          console.log("Redirigiendo / → /carven2");
+          console.log("Redirigiendo / → /proyect-one");
           res.statusCode = 302;
-          res.setHeader("Location", "/carven2");
+          res.setHeader("Location", "/proyect-one");
           res.end();
           return;
         }
