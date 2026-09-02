@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
+import { API_URL, DEMO_MODE, demoActualizarStatus } from "../config";
 
 function Status() {
   const [loading, setLoading] = useState(false);
@@ -42,23 +43,19 @@ function Status() {
     setResultados([]);
 
     try {
-      // Llamada al backend
-      const response = await fetch("http://192.168.28.35:3002/status/cambiar", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: status.trim(),
-          claves: carvenList,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Error al procesar los carven");
-      }
+      const data = DEMO_MODE
+        ? demoActualizarStatus(carvenList, status.trim())
+        : await fetch(`${API_URL}/status/cambiar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: status.trim(), claves: carvenList }),
+          }).then(async (response) => {
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(result.message || "Error al procesar los carven");
+            }
+            return result;
+          });
 
       setProgress(
         `✅ ${data.actualizadas} de ${data.totalEnviadas} carven actualizados correctamente`,

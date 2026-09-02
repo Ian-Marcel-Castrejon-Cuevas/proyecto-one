@@ -14,10 +14,6 @@ body {
   min-height: 100vh;
 }
 
-.app.carven2-mode {
-  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
-}
-
 .app.proyectone-mode {
   background: linear-gradient(145deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
 }

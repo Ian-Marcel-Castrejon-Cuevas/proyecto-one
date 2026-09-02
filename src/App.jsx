@@ -2,12 +2,11 @@ import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import "./App.css";
-import Carven2 from "./components/Carven2";
-import AdminPanel from "./components/AdminPanel";
 import Leyendas from "./components/Leyendas";
 import Status from "./components/Status";
 import Devoluciones from "./components/Devoluciones";
 import PlantillasWhatsApp from "./components/PlantillasWhatsApp";
+import { API_URL, DEMO_MODE, demoVerificar } from "./config";
 
 // Componente principal de verificación de cuentas EDOMEX
 function ProyectOne() {
@@ -50,8 +49,12 @@ function ProyectOne() {
     if (window.confirm("¿Estas seguro de botar carven?.")) {
       setIsDeleting(true);
       try {
+        if (DEMO_MODE) {
+          alert("Modo demo: no se realizaron cambios en ningún servidor.");
+          return;
+        }
         const response = await fetch(
-          "http://192.168.28.35:3002/verificacion/borrar-ingresos",
+          `${API_URL}/verificacion/borrar-ingresos`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -248,13 +251,13 @@ function ProyectOne() {
 
       const clavesLimpias = claves.map((r) => r.toString());
 
-      const response = await fetch("http://192.168.28.35:3002/verificar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claves: clavesLimpias }),
-      });
-
-      const data = await response.json();
+      const data = DEMO_MODE
+        ? demoVerificar(clavesLimpias)
+        : await fetch(`${API_URL}/verificar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ claves: clavesLimpias }),
+          }).then((response) => response.json());
       console.log("Respuesta del backend para", file.name, ":", data);
 
       // Crear Excel con resultados o archivo modificado
@@ -491,13 +494,13 @@ function ProyectOne() {
     try {
       setIsLoading(true);
 
-      const response = await fetch("http://192.168.28.35:3002/verificar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claves: claves }),
-      });
-
-      const data = await response.json();
+      const data = DEMO_MODE
+        ? demoVerificar(claves)
+        : await fetch(`${API_URL}/verificar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ claves }),
+          }).then((response) => response.json());
       console.log("Respuesta del backend manual:", data);
 
       let url = null;
@@ -962,8 +965,6 @@ function App() {
   return (
     <Routes>
       <Route path="/proyect-one" element={<ProyectOne />} />
-      <Route path="/carven2" element={<Carven2 />} />
-      <Route path="/carven2/admin" element={<AdminPanel />} />
       <Route path="/leyendas" element={<Leyendas />} />
       <Route path="/status" element={<Status />} />
       <Route path="/devoluciones" element={<Devoluciones />} />

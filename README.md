@@ -1,200 +1,122 @@
-```markdown
-# Proyecto Uno 🚀
+# Proyecto One
 
-Proyecto Uno is a React-based application designed to interact with a PostgreSQL database for retrieving debtor information based on specific criteria. It allows users to query debtor details, including their address, municipality, and state, by providing a list of debtor keys.
+Aplicacion web interna para la operacion y seguimiento de cuentas. Permite preparar archivos de trabajo, verificar identificadores, actualizar status, gestionar devoluciones y generar reportes Excel. El frontend esta construido con React y Vite y se conecta al backend corporativo mediante una configuracion externa cuando se ejecuta en produccion.
 
-## Features ⚡
+## Caracteristicas
 
-*   **Debtor Verification**: Retrieve debtor information by providing a list of debtor keys.
-*   **Database Integration**: Connects to a PostgreSQL database to fetch data.
-*   **Specific Filtering**: Filters results based on state ('15') and a predefined list of municipalities.
-*   **React Frontend**: Built with React for a dynamic and responsive user interface.
-*   **Express Backend**: Utilizes Express.js to handle API requests and database interactions.
-*   **CORS Enabled**: Allows cross-origin requests for seamless frontend-backend communication.
-*   **Linting**: Integrated ESLint for code quality and consistency.
+- Carga de uno o varios archivos `.xlsx` o `.xls`.
+- Seleccion de una columna para simular la verificacion de cuentas.
+- Busqueda manual de identificadores.
+- Renombrado de archivos con cliente, fecha, remitente, tipo de pago, suscripcion y hora.
+- Exportacion de resultados a Excel desde el navegador.
+- Modulos de cambio de status y devoluciones.
+- Modo demo opcional para revisar la interfaz sin servidor ni datos reales.
+- Configuracion de la conexion externa mediante variables de entorno.
 
-## Tech Stack 📦
+## Tecnologia
 
-*   **Frontend**: React, React DOM, React Router DOM, Vite
-*   **Backend**: Node.js, Express.js
-*   **Database**: PostgreSQL (via `pg` package)
-*   **HTTP Client**: Axios
-*   **Middleware**: CORS, Morgan, Express-Rate-Limit
-*   **File Handling**: Multer, JSZip, Node-Stream-Zip
-*   **Caching**: Node-Cache
-*   **Utilities**: Compression, XLSX
-*   **Development Tools**: ESLint, Vite Plugin React
+- React 19, React Router y Vite.
+- SheetJS (`xlsx`) para leer y generar hojas de calculo localmente.
+- ESLint para validacion de codigo.
+- Node.js 20 o superior y npm.
 
-## Installation 🛠️
+## Arquitectura
 
-1.  **Clone the Repository**:
-    ```bash
-    git clone <repository-url>
-    cd proyect-one
-    ```
-
-2.  **Install Frontend Dependencies**:
-    ```bash
-    npm install
-    # or
-    yarn install
-    ```
-
-3.  **Install Backend Dependencies**:
-    Navigate to the server directory (if separate) or ensure the server dependencies are installed within the main project.
-    ```bash
-    npm install
-    # or
-    yarn install
-    ```
-
-4.  **Database Setup**:
-    *   Ensure you have a PostgreSQL database running.
-    *   Create the necessary tables and schemas as expected by the `server.js` script (e.g., `tbdirecciones`, `tbmunicipios`, `tbestados`, `tbdeudor`).
-    *   Configure your database connection in the `db.js` file (or environment variables if preferred).
-
-5.  **Environment Variables**:
-    Create a `.env` file in the root directory and configure your database connection details.
-    ```dotenv
-    # Example .env file
-    DB_USER=your_db_user
-    DB_HOST=localhost
-    DB_DATABASE=your_db_name
-    DB_PASSWORD=your_db_password
-    DB_PORT=5432
-    ```
-
-## Usage ▶️
-
-1.  **Start the Development Server**:
-    This command will start both the React development server and the Express backend concurrently.
-    ```bash
-    npm run dev
-    # or
-    yarn dev
-    ```
-
-2.  **Access the Application**:
-    The application will typically be accessible at `http://localhost:5173` (Vite default) for the frontend, and the backend will be running on a separate port (e.g., `http://localhost:3000`).
-
-3.  **Example API Request (from frontend)**:
-    The frontend can make a `POST` request to the `/verificar` endpoint on the backend.
-
-    ```javascript
-    // Example in your React component
-    import axios from 'axios';
-
-    const verificarDeudores = async (claves) => {
-      try {
-        const response = await axios.post('http://localhost:3000/verificar', { claves });
-        console.log('Debtor data:', response.data);
-        return response.data;
-      } catch (error) {
-        console.error('Error verifying debtors:', error);
-        throw error;
-      }
-    };
-
-    // Usage:
-    // verificarDeudores(['key1', 'key2', 'key3']);
-    ```
-
-4.  **Example Backend Logic (`server.js`)**:
-    The `server.js` file handles the POST request to `/verificar`.
-
-    ```javascript
-    // ... inside server.js
-    app.post("/verificar", async (req, res) => {
-      const { claves } = req.body;
-
-      if (!claves || claves.length === 0) {
-        return res.status(400).json({ error: "No se enviaron claves" });
-      }
-
-      try {
-        const query = `
-          SELECT
-            tbdeudor.deacvedeudor AS Clave,
-            tbdirecciones.diacodpostal AS CP,
-            tbmunicipios.cpanommunicipio AS Municipio,
-            tbestados.cpanombre AS Estado
-          FROM tbdirecciones
-          JOIN tbmunicipios ON tbmunicipios.cpacvemunicipio = tbdirecciones.cpacvemunicipio
-          JOIN tbestados ON tbestados.cpacveestado = tbdirecciones.cpacveestado
-          JOIN tbdeudor ON tbdeudor.deacvedeudor = tbdirecciones.deacvedeudor
-          WHERE tbestados.cpacveestado = '15'
-            AND tbmunicipios.cpacvemunicipio IN ('008','025','028','029','031','033','035','070','058','073','080','082','086','089','090','100','105','106','122')
-            AND tbdeudor.deacvedeudor = ANY($1::text[]);
-        `;
-        const result = await pool.query(query, [claves]);
-        res.json(result.rows);
-      } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Error interno del servidor" });
-      }
-    });
-    // ...
-    ```
-
-## Project Structure 📂
-
+```mermaid
+flowchart LR
+    U[Usuario] --> V[Aplicacion React + Vite]
+      V --> F[Procesamiento y exportacion XLSX]
+      V --> A[Servicio corporativo]
+      A --> B[Backend de operaciones]
+      B --> DB[(Base de datos corporativa)]
 ```
+
+## Puesta en marcha
+
+1. Instala Node.js 20 o superior.
+2. Instala dependencias:
+
+   ```bash
+   npm install
+   ```
+
+3. Inicia el entorno local:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Abre la URL que muestra Vite, normalmente `http://localhost:5173`.
+
+## Rutas del frontend
+
+Estas rutas pertenecen a la aplicacion React y son seguras para documentar y compartir:
+
+| Ruta                   | Modulo                  | Funcion                                                |
+| ---------------------- | ----------------------- | ------------------------------------------------------ |
+| `/`                    | Verificacion de cuentas | Entrada principal de la aplicacion.                    |
+| `/proyect-one`         | Verificacion de cuentas | Carga, analisis, renombrado y exportacion de archivos. |
+| `/leyendas`            | Leyendas                | Consulta de leyendas y referencias operativas.         |
+| `/status`              | Actualizacion de status | Preparacion y consulta de cambios de status.           |
+| `/devoluciones`        | Devoluciones            | Carga y procesamiento de archivos de devoluciones.     |
+| `/plantillas-whatsapp` | Plantillas WhatsApp     | Consulta y uso de mensajes operativos.                 |
+
+## Modo demo
+
+El modo demo esta activado por defecto. Permite revisar la experiencia del frontend sin conectarse al servicio corporativo. Tambien puedes dejarlo explicito definiendo `VITE_DEMO_MODE=true` en `.env`:
+
+```dotenv
+VITE_DEMO_MODE=true
+```
+
+En este modo:
+
+- Las verificaciones usan datos ficticios generados en el navegador.
+- Status y devoluciones muestran resultados simulados.
+- La accion de borrar indica que no se realizaron cambios.
+- No se envian identificadores, archivos ni informacion del navegador a ningun servidor.
+
+Para activar la conexion real, elimina `VITE_DEMO_MODE` o establece su valor en `false` y configura la URL del servicio en el entorno de despliegue. El servicio y sus credenciales deben administrarse fuera de este repositorio.
+
+## Scripts
+
+| Comando           | Descripcion                                 |
+| ----------------- | ------------------------------------------- |
+| `npm run dev`     | Inicia el servidor de desarrollo.           |
+| `npm run build`   | Genera la version de produccion en `dist/`. |
+| `npm run preview` | Sirve localmente la compilacion.            |
+| `npm run start`   | Sirve la compilacion de produccion.         |
+| `npm run lint`    | Ejecuta ESLint.                             |
+
+## Estructura
+
+```text
 .
-├── public/             # Static assets (favicon, icons)
-│   ├── favicon.svg
-│   └── icons.svg
-├── src/                # Frontend source code
-│   ├── assets/         # Images and other assets
-│   │   ├── hero.png
-│   │   ├── react.svg
-│   │   └── vite.svg
-│   ├── components/     # Reusable React components
-│   │   ├── AdminPanel.jsx
-│   │   ├── Carven2.jsx
-│   │   ├── Leyendas.jsx
-│   │   └── PlantillasWhatsapp.jsx
+├── public/                 # Recursos estaticos
+├── src/
+│   ├── components/         # Leyendas, status, devoluciones y plantillas
+│   ├── App.jsx             # Flujo principal de carga y exportacion
+│   ├── config.js           # Modo demo y datos simulados
 │   ├── App.css
-│   ├── App.jsx         # Main application component
-│   ├── db.js           # Database connection logic (backend)
 │   ├── index.css
-│   ├── main.jsx        # Entry point for React application
-│   └── PROYECTOS_2.code-workspace # VS Code workspace file
-├── eslint.config.js    # ESLint configuration
-├── index.html          # HTML entry point for Vite
-├── package-lock.json   # npm dependency lock file
-├── package.json        # Project metadata and dependencies
-├── README.md           # This README file
-├── server.js           # Express backend server
-└── vite.config.js      # Vite build tool configuration
+│   └── main.jsx
+├── .env.example            # Configuracion segura de ejemplo
+├── .gitignore
+├── index.html
+├── package.json
+└── vite.config.js
 ```
 
-## Configuration ⚙️
+## Seguridad y privacidad
 
-*   **Database**: The `db.js` file or `.env` file should contain your PostgreSQL connection string or credentials.
-*   **Port**: The Express server's port can be configured, typically via an environment variable (e.g., `PORT=3000`).
-*   **CORS**: The `cors` middleware is used, allowing configuration of allowed origins if needed.
-*   **Rate Limiting**: `express-rate-limit` is included and can be configured to limit API requests.
+- El repositorio no contiene credenciales, contrasenas, tokens ni conexiones a redes privadas.
+- Los archivos seleccionados se procesan en memoria del navegador y no se suben durante el modo demo.
+- Los archivos `.env` estan excluidos de Git; solo `.env.example` debe versionarse.
+- Antes de publicar, revisa tambien el historial de Git y rota cualquier credencial que haya sido expuesta anteriormente.
+- El backend real debe vivir separado, mantener sus secretos fuera del frontend y aplicar controles de acceso antes de habilitar `VITE_DEMO_MODE=false`.
 
-## Contributing 🤝
+## Licencia
 
-Contributions are welcome! Please follow these guidelines:
+© 2026 Ian Marcel Castrejon Cuevas. Todos los derechos reservados.
 
-1.  **Fork the Repository**: Create your own fork of the project.
-2.  **Create a New Branch**: Make your changes in a descriptive branch.
-    ```bash
-    git checkout -b feature/your-feature-name
-    ```
-3.  **Commit Your Changes**: Write clear and concise commit messages.
-    ```bash
-    git commit -m "feat: Add new feature for X"
-    ```
-4.  **Push to the Branch**:
-    ```bash
-    git push origin feature/your-feature-name
-    ```
-5.  **Open a Pull Request**: Submit a pull request to the main repository.
-
-## License 📜
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-```
+Este proyecto y su código fuente son propiedad de Ian Marcel Castrejon Cuevas. Queda prohibida la reproducción, distribución, modificación o utilización del código, total o parcialmente, sin autorización previa del propietario.

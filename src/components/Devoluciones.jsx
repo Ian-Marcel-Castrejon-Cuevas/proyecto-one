@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
+import { API_URL, DEMO_MODE, demoProcesarDevoluciones } from "../config";
 
 function Devoluciones() {
   const [file, setFile] = useState(null);
@@ -292,20 +293,21 @@ function Devoluciones() {
     setResultados([]);
 
     try {
-      const response = await fetch(
-        "http://192.168.28.35:3002/devoluciones/procesar",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: tipoIdentificador, registros }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Error al procesar las devoluciones");
-      }
+      const data = DEMO_MODE
+        ? demoProcesarDevoluciones(registros)
+        : await fetch(`${API_URL}/devoluciones/procesar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tipo: tipoIdentificador, registros }),
+          }).then(async (response) => {
+            const result = await response.json();
+            if (!response.ok) {
+              throw new Error(
+                result.message || "Error al procesar las devoluciones",
+              );
+            }
+            return result;
+          });
 
       setProgress(
         `✅ ${data.actualizados || registros.length} registros procesados correctamente`,
